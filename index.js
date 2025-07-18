@@ -133,11 +133,24 @@ app.post('/bookings', verifyFireBaseToken, async (req, res) => {
     })
 
 // courts
+app.get('/courtsCount',async(req,res)=>{
+      const count=await courtCollection.estimatedDocumentCount()
+      res.send({count})
+    })
+
   app.get('/courts', verifyFireBaseToken, async (req, res) => {
    
       const courts = await courtCollection.find().toArray();
       res.send(courts);
     
+  });
+  app.get('/courtsUser',  async (req, res) => {
+   
+     const page=parseInt(req.query.page)
+        const size=parseInt(req.query.size)
+        const skip= page* size;
+        const result = await courtCollection.find().skip(skip).limit(size).toArray();
+        res.send(result);
   });
   app.post('/courts', verifyFireBaseToken, async (req, res) => {
     const { type, image, price, slots } = req.body;
