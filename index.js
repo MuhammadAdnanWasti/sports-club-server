@@ -83,7 +83,13 @@ const db = client.db("sportsclub");
   const result=await userCollection.insertOne(user)
   res.send(result)
 })
+
+
 // bookings
+
+
+
+
 app.post('/bookings', verifyFireBaseToken, async (req, res) => {
   
       const email = req.decoded.email;
@@ -131,6 +137,46 @@ app.post('/bookings', verifyFireBaseToken, async (req, res) => {
       const result = await bookingCollection.insertOne(doc);
       res.send(result)
     })
+
+ app.get('/bookings',verifyFireBaseToken, async (req, res) => {
+ const { user: email, status } = req.query;
+      const filter = {};
+      if (email) filter.user_email = email;
+      if (status) filter.status = status;
+      const list = await bookingCollection.find(filter).toArray();
+     res.send(list)
+});
+
+ app.delete('/bookings/:id', verifyFireBaseToken, async (req, res) => {
+   
+          const { id } = req.params;
+      if (!ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' });
+      const result = await bookingCollection.deleteOne({ _id: new ObjectId(id) });
+      res.send(result)
+    
+  });
+
+app.get('/bookings',verifyFireBaseToken, async (req, res) => {
+  const { status = 'pending' } = req.query;
+      const list = await bookingCollection.find({ status }).toArray();
+      res.send(list)
+});
+    app.patch('/bookings/:id/approve', verifyFireBaseToken, async (req, res) => {
+   
+      const { id } = req.params;
+     const result= await bookingCollection.updateOne({ _id: new ObjectId(id) },  { $set: { status: 'approved', updated_at: new Date().toISOString() } });
+      
+     res.send(result)
+    
+  });
+    app.patch('/bookings/:id/reject', verifyFireBaseToken, async (req, res) => {
+   
+      const { id } = req.params;
+     const result= await bookingCollection.updateOne({ _id: new ObjectId(id) },  { $set: { status: 'rejected', updated_at: new Date().toISOString() } });
+      
+     res.send(result)
+    
+  });
 
 // courts
 app.get('/courtsCount',async(req,res)=>{
