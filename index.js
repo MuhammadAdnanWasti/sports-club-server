@@ -3,6 +3,7 @@ const app = express()
 const cors=require('cors')
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config()
+const stripe=require('stripe')(process.env.PAYMENT_GATEWAY_KEY)
 const port =process.env.PORT || 3000
 app.use(cors())
 app.use(express.json())
@@ -59,7 +60,96 @@ const db = client.db("sportsclub");
   const  announcementCollection = db.collection("announcements");
   const  couponCollection = db.collection("coupons");
   const  bookingCollection = db.collection("bookings");
- 
+  const  paymentCollection = db.collection("payments");
+//  create payment intent-strip
+
+   app.post('/create-payment-intent', async (req, res) => {
+            const amountInCents = req.body.amountInCents
+            try {
+                const paymentIntent = await stripe.paymentIntents.create({
+                    amount: Number(amountInCents), // Amount in cents
+                    currency: 'usd',
+                    payment_method_types: ['card'],
+                });
+
+                res.json({ clientSecret: paymentIntent.client_secret });
+            } catch (error) {
+              console.log(error)
+                res.status(500).json({ error: error.message });
+                
+            }
+        });
+
+   app.post('/payments', verifyFireBaseToken,async (req, res) => {
+            try {
+                const { _id, email, amount, paymentMethod, transactionId } = req.body;
+
+                // 1. Update parcel's payment_status
+                const updateResult = await bookingCollection.updateOne(
+                    { _id: new ObjectId(_id) },
+                    {
+                        $set: {
+                           status:'confirmed'
+                        }
+                    }
+                );
+
+                if (updateResult.modifiedCount === 0) {
+                    return res.status(404).send({ message: 'Parcel not found or already paid' });
+                }
+
+                // 2. Insert payment record
+                const paymentDoc = {
+                    _id,
+                    email,
+                    amount,
+                    paymentMethod,
+                    transactionId,
+                    paid_at_string: new Date().toISOString(),
+                    paid_at: new Date(),
+                };
+
+                const paymentResult = await paymentCollection.insertOne(paymentDoc);
+
+                res.status(201).send({
+                    message: 'Payment recorded and parcel marked as paid',
+                    insertedId: paymentResult.insertedId,
+                });
+
+            } catch (error) {
+                console.error('Payment processing failed:', error);
+                res.status(500).send({ message: 'Failed to record payment' });
+            }
+        });
+
+           app.get('/bookings/:id', async (req, res) => {
+            try {
+                const id = req.params.id;
+
+                const parcel = await bookingCollection.findOne({ _id: new ObjectId(id) });
+
+                if (!parcel) {
+                    return res.status(404).send({ message: 'Booking not found' });
+                }
+
+                res.send(parcel);
+            } catch (error) {
+                console.error('Error fetching parcel:', error);
+                res.status(500).send({ message: 'Failed to fetch parcel' });
+            }
+        });
+
+
+
+
+
+
+   
+
+   
+
+
+   
 // user
  app.get('/users/:email',verifyFireBaseToken, async (req, res) => {
   const email = req.params.email; 
