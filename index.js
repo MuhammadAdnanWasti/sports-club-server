@@ -63,6 +63,22 @@ const db = client.db("sportsclub");
   const  paymentCollection = db.collection("payments");
 //  create payment intent-strip
 
+ app.post('/coupons/validate', verifyFireBaseToken, async (req, res) => {
+   
+      const { code } = req.body;
+      if (!code) return res.json({ valid: false, discount: 0, finalTotal: subtotal });
+      const c = await couponCollection.findOne({ code: code.trim().toUpperCase(), active: true });
+      if (!c) return res.json({ valid: false,...c});
+
+    
+      res.json({ valid: true, ...c});
+   
+  });
+
+
+
+
+
    app.post('/create-payment-intent', async (req, res) => {
             const amountInCents = req.body.amountInCents
             try {
@@ -139,7 +155,15 @@ const db = client.db("sportsclub");
             }
         });
 
+// payment history
 
+app.get('/payments',verifyFireBaseToken, async (req, res) => {
+ const { user: email } = req.query;
+      const filter = {};
+      if (email) filter.email = email;
+      const list = await paymentCollection.find(filter).toArray();
+     res.send(list)
+});
 
 
 
