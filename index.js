@@ -61,6 +61,39 @@ const db = client.db("sportsclub");
   const  couponCollection = db.collection("coupons");
   const  bookingCollection = db.collection("bookings");
   const  paymentCollection = db.collection("payments");
+
+
+// middleware
+const verifyAdmin = async (req, res, next) => {
+      const email = req?.decoded?.email
+      console.log('fdsfds',email)
+      const user = await userCollection.findOne({
+        email,
+      })
+      console.log(user?.role)
+      if (!user || user?.role !== 'admin')
+        return res
+          .status(403)
+          .send({ message: 'Admin only Actions!', role: user?.role })
+
+      next()
+    }
+
+    const verifyMember = async (req, res, next) => {
+      const email = req?.decoded?.email
+      const user = await userCollection.findOne({
+        email,
+      })
+      console.log(user?.role)
+      if (!user || user?.role !== 'member')
+        return res
+          .status(403)
+          .send({ message: 'Member only Actions!', role: user?.role })
+
+      next()
+    }
+
+
 //  create payment intent-strip
 
  app.post('/coupons/validate', verifyFireBaseToken, async (req, res) => {
@@ -157,7 +190,7 @@ const db = client.db("sportsclub");
 
 // payment history
 
-app.get('/payments',verifyFireBaseToken, async (req, res) => {
+app.get('/payments',verifyFireBaseToken,verifyMember, async (req, res) => {
  const { user: email } = req.query;
       const filter = {};
       if (email) filter.email = email;
@@ -165,9 +198,14 @@ app.get('/payments',verifyFireBaseToken, async (req, res) => {
      res.send(list)
 });
 
+// get a user role
 
-
-
+ app.get('/user/role/:email', async (req, res) => {
+      const email = req.params.email
+      const result = await userCollection.findOne({ email })
+      if (!result) return res.status(404).send({ message: 'User Not Found.' })
+      res.send({ role: result?.role })
+    })
    
 
    
@@ -275,15 +313,31 @@ app.get('/bookings',verifyFireBaseToken, async (req, res) => {
       const list = await bookingCollection.find({ status }).toArray();
       res.send(list)
 });
-    app.patch('/bookings/:id/approve', verifyFireBaseToken, async (req, res) => {
+app.get('/bookings',verifyFireBaseToken, async (req, res) => {
+  const { status = 'confirmed' } = req.query;
+      const list = await bookingCollection.find({ status }).toArray();
+      res.send(list)
+});
+    app.patch('/bookings/:id/approve', verifyFireBaseToken,verifyAdmin, async (req, res) => {
    
       const { id } = req.params;
      const result= await bookingCollection.updateOne({ _id: new ObjectId(id) },  { $set: { status: 'approved', updated_at: new Date().toISOString() } });
       
-     res.send(result)
+  // Fetch the booking to get the user email
+      const booking = await bookingCollection.findOne({ _id: new ObjectId(id) });
+      const userEmail = booking.user_email;
+
+      // Promote that user to "member"
+      const userUpdate = await userCollection.updateOne(
+        { email: userEmail },
+        { $set: { role: 'member', updated_at: new Date().toISOString() } }
+      );
+     
+
+     res.send({result, userUpdate})
     
   });
-    app.patch('/bookings/:id/reject', verifyFireBaseToken, async (req, res) => {
+    app.patch('/bookings/:id/reject', verifyFireBaseToken,verifyAdmin, async (req, res) => {
    
       const { id } = req.params;
      const result= await bookingCollection.updateOne({ _id: new ObjectId(id) },  { $set: { status: 'rejected', updated_at: new Date().toISOString() } });
@@ -291,6 +345,34 @@ app.get('/bookings',verifyFireBaseToken, async (req, res) => {
      res.send(result)
     
   });
+// getting all users
+
+ app.get('/all-users', verifyFireBaseToken, async (req, res) => {
+      
+      
+      const result = await userCollection.find({ role: 'user' }).toArray()
+      res.send(result)
+    })
+ app.get('/all-members', verifyFireBaseToken, async (req, res) => {
+      
+      
+      const result = await userCollection.find({ role: 'member' }).toArray()
+      res.send(result)
+    })
+
+
+    // delete members
+      app.delete('/users/:email', verifyFireBaseToken,verifyAdmin, async (req, res) => {
+    
+      const { email } = req.params;
+      const result = await userCollection.deleteOne({ email });
+      if (!result.deletedCount) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      res.send(result)
+    
+  });
+
 
 // courts
 app.get('/courtsCount',async(req,res)=>{
@@ -312,7 +394,7 @@ app.get('/courtsCount',async(req,res)=>{
         const result = await courtCollection.find().skip(skip).limit(size).toArray();
         res.send(result);
   });
-  app.post('/courts', verifyFireBaseToken, async (req, res) => {
+  app.post('/courts', verifyFireBaseToken,verifyAdmin, async (req, res) => {
     const { type, image, price, slots } = req.body;
       if (!type || !image || price == null) {
         return res.status(400).json({ message: 'type, image, price required' });
@@ -330,7 +412,7 @@ app.get('/courtsCount',async(req,res)=>{
     
   });
 
-  app.patch('/courts/:id', verifyFireBaseToken, async (req, res) => {
+  app.patch('/courts/:id', verifyFireBaseToken,verifyAdmin, async (req, res) => {
    
       const { id } = req.params;
       if (!ObjectId.isValid(id)) {
@@ -352,7 +434,7 @@ app.get('/courtsCount',async(req,res)=>{
      res.send(result)
     
   });
-  app.delete('/courts/:id', verifyFireBaseToken, async (req, res) => {
+  app.delete('/courts/:id', verifyFireBaseToken,verifyAdmin, async (req, res) => {
    
           const { id } = req.params;
       if (!ObjectId.isValid(id)) {
@@ -374,7 +456,7 @@ app.get('/courtsCount',async(req,res)=>{
       res.send(courts);
     
   });
-  app.post('/announcements', verifyFireBaseToken, async (req, res) => {
+  app.post('/announcements', verifyFireBaseToken,verifyAdmin, async (req, res) => {
      let { title, message, image, startDate, endDate, active } = req.body;
       if (!title || !message) {
         return res.status(400).json({ message: 'title & message required' });
@@ -394,7 +476,7 @@ app.get('/courtsCount',async(req,res)=>{
     
   });
 
-  app.patch('/announcements/:id', verifyFireBaseToken, async (req, res) => {
+  app.patch('/announcements/:id', verifyFireBaseToken,verifyAdmin, async (req, res) => {
    
       const { id } = req.params;
       if (!ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' });
@@ -413,7 +495,7 @@ app.get('/courtsCount',async(req,res)=>{
      
     
   });
-  app.delete('/announcements/:id', verifyFireBaseToken, async (req, res) => {
+  app.delete('/announcements/:id', verifyFireBaseToken,verifyAdmin, async (req, res) => {
    
         const { id } = req.params;
       if (!ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' });
@@ -424,13 +506,13 @@ app.get('/courtsCount',async(req,res)=>{
   });
 
 // coupons
-app.get('/coupons', verifyFireBaseToken, async (req, res) => {
+app.get('/coupons',  async (req, res) => {
    
       const courts = await couponCollection.find().toArray();
       res.send(courts);
     
   });
-  app.post('/coupons', verifyFireBaseToken, async (req, res) => {
+  app.post('/coupons', verifyFireBaseToken,verifyAdmin, async (req, res) => {
       let { code, description, discountType, amount, minSpend, maxDiscount, startDate, endDate, active, usageLimit } = req.body;
       if (!code || !discountType || amount == null) {
         return res.status(400).json({ message: 'code, discountType, amount required' });
@@ -453,7 +535,7 @@ app.get('/coupons', verifyFireBaseToken, async (req, res) => {
     
   });
 
-  app.patch('/coupons/:id', verifyFireBaseToken, async (req, res) => {
+  app.patch('/coupons/:id', verifyFireBaseToken,verifyAdmin, async (req, res) => {
    
        const { id } = req.params;
       if (!ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' });
@@ -476,7 +558,7 @@ app.get('/coupons', verifyFireBaseToken, async (req, res) => {
      
     
   });
-  app.delete('/coupons/:id', verifyFireBaseToken, async (req, res) => {
+  app.delete('/coupons/:id', verifyFireBaseToken,verifyAdmin, async (req, res) => {
    
      const { id } = req.params;
       if (!ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' });
