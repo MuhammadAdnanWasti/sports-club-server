@@ -13,7 +13,7 @@ React.js, Tailwind Css , Firebase, MongoDB, react-router, Express.js, Stripe, Ax
 
 
 
-Features:
+# Features:
 🔐 Role-Based Access Control (RBAC): Separate dashboards for User, Member, and Admin.
 
 🏸 Court/Session Booking: Real-time booking with dynamic price calculation
